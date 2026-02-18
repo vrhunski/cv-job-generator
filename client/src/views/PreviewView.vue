@@ -5,6 +5,7 @@ import type { CVProfile, TailoredSession } from '../../../shared/types'
 import { useProfile } from '@/composables/useProfile'
 import { useSessions } from '@/composables/useSessions'
 import { useSuggestions } from '@/composables/useSuggestions'
+import { useApplications } from '@/composables/useApplications'
 import { downloadPdf } from '@/services/pdfExport'
 import CvComparison from '@/components/preview/CvComparison.vue'
 
@@ -12,9 +13,12 @@ const router = useRouter()
 const { profile } = useProfile()
 const { addSession } = useSessions()
 const { suggestions, getApproved } = useSuggestions()
+const { createFromSession, addApplication, linkSession } = useApplications()
 
 const downloading = ref(false)
 const saved = ref(false)
+const savedSessionId = ref<string | null>(null)
+const downloadedAppId = ref<string | null>(null)
 
 const jobContext = (() => {
   try {
@@ -120,6 +124,20 @@ async function handleDownload() {
   downloading.value = true
   try {
     await downloadPdf(tailoredProfile.value)
+    // Auto-log the application
+    if (savedSessionId.value) {
+      // Session already saved — link to it (no-op if already exists)
+      createFromSession(savedSessionId.value, jobContext.company || 'Unknown', jobContext.jobTitle || 'Unknown')
+    } else if (!downloadedAppId.value) {
+      // Not yet saved as a session — create a standalone entry
+      const app = addApplication({
+        company: jobContext.company || 'Unknown',
+        jobTitle: jobContext.jobTitle || 'Unknown',
+        appliedDate: new Date().toISOString().split('T')[0],
+        status: 'gesendet',
+      })
+      downloadedAppId.value = app.id
+    }
   } catch (err: any) {
     alert(err.message || 'PDF download failed')
   } finally {
@@ -143,7 +161,13 @@ function handleSaveSession() {
   }
 
   addSession(session)
+  savedSessionId.value = session.id
   saved.value = true
+
+  // If already downloaded (standalone entry exists), link it to the session
+  if (downloadedAppId.value) {
+    linkSession(downloadedAppId.value, session.id)
+  }
 }
 </script>
 

@@ -91,6 +91,25 @@ export interface Suggestion {
   status: 'pending' | 'approved' | 'rejected'
 }
 
+export interface JobApplication {
+  id: string
+  sessionId?: string
+  company: string
+  jobTitle: string
+  appliedDate: string
+  status: ApplicationStatus
+  notes?: string
+  senderEmail?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type ApplicationStatus =
+  | 'gesendet'
+  | 'in_bearbeitung'
+  | 'abgelehnt'
+  | 'eingestellt'
+
 export type SuggestionType =
   | 'align_job_title'
   | 'rewrite_summary_hook'

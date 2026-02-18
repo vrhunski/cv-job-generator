@@ -2,11 +2,13 @@
 import { useRouter } from 'vue-router'
 import { useProfile } from '@/composables/useProfile'
 import { useSessions } from '@/composables/useSessions'
+import { useApplications } from '@/composables/useApplications'
 import { downloadPdf } from '@/services/pdfExport'
 
 const router = useRouter()
 const { profile, hasProfile } = useProfile()
 const { sessions, deleteSession } = useSessions()
+const { hasApplicationForSession, createFromSession } = useApplications()
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -19,6 +21,7 @@ function formatDate(iso: string) {
 async function handleDownload(session: any) {
   try {
     await downloadPdf(session.tailoredProfile)
+    createFromSession(session.id, session.company, session.jobTitle)
   } catch (err: any) {
     alert(err.message || 'PDF download failed')
   }
@@ -54,7 +57,10 @@ async function handleDownload(session: any) {
         <div class="sessions-grid">
           <div v-for="session in sessions" :key="session.id" class="card session-card">
             <div class="session-info">
-              <strong>{{ session.jobTitle }}</strong>
+              <div class="session-title-row">
+                <strong>{{ session.jobTitle }}</strong>
+                <span v-if="hasApplicationForSession(session.id)" class="applied-badge">Beworben</span>
+              </div>
               <span class="company">{{ session.company }}</span>
               <span class="date">{{ formatDate(session.createdAt) }}</span>
             </div>
@@ -148,6 +154,21 @@ h1 {
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+.session-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.applied-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #dcfce7;
+  color: #166534;
 }
 
 .session-info .company {

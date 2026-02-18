@@ -15,6 +15,7 @@ const showSettings = ref(false)
         <RouterLink to="/upload">Upload CV</RouterLink>
         <RouterLink to="/tailor">Tailor</RouterLink>
         <RouterLink to="/preview">Preview</RouterLink>
+        <RouterLink to="/applications">Bewerbungen</RouterLink>
       </nav>
       <button class="btn btn-sm btn-secondary" @click="showSettings = true">Settings</button>
     </div>

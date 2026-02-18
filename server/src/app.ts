@@ -3,6 +3,7 @@ import cors from 'cors'
 import parseRouter from './routes/parse'
 import pdfRouter from './routes/pdf'
 import aiRouter from './routes/ai'
+import mailRouter from './routes/mail'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -17,6 +18,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/parse', parseRouter)
 app.use('/api/pdf', pdfRouter)
 app.use('/api/ai', aiRouter)
+app.use('/api/mail', mailRouter)
 
 const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
