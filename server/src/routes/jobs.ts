@@ -48,7 +48,10 @@ async function getArbeitsagenturToken(): Promise<string | null> {
       body: 'client_id=c003a37f-024f-462a-b36d-b001be4cd24a&client_secret=32a39620-32b3-4307-9aa1-511e3d7f48a8&grant_type=client_credentials',
     })
     if (!res.ok) return null
-    const data = await res.json() as any
+    const text = await res.text()
+    if (!text.trim().startsWith('{')) return null
+    const data = JSON.parse(text) as any
+    if (!data.access_token) return null
     aaToken = data.access_token
     aaTokenExpiry = Date.now() + (data.expires_in - 60) * 1000
     return aaToken
@@ -58,7 +61,11 @@ async function getArbeitsagenturToken(): Promise<string | null> {
 }
 
 // ── Fetch from ArbeitNow ──────────────────────────────────────────────────────
-async function fetchArbeitNow(keyword: string, page: number): Promise<JobListing[]> {
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+async function fetchArbeitNowPage(keyword: string, page: number): Promise<JobListing[]> {
   try {
     const url = `https://www.arbeitnow.com/api/job-board-api?page=${page}`
     const res = await fetch(url, { headers: { 'Accept': 'application/json' } })
@@ -76,17 +83,31 @@ async function fetchArbeitNow(keyword: string, page: number): Promise<JobListing
       tags: Array.isArray(j.tags) ? j.tags : [],
       postedAt: j.created_at ? new Date(j.created_at * 1000).toISOString() : undefined,
     }))
-    // Filter locally by keyword (title or description contains keyword)
     if (!keyword.trim()) return jobs
     const kw = keyword.toLowerCase()
     return jobs.filter(j =>
       j.title.toLowerCase().includes(kw) ||
       j.company.toLowerCase().includes(kw) ||
-      j.tags.some(t => t.toLowerCase().includes(kw))
+      j.tags.some(t => t.toLowerCase().includes(kw)) ||
+      stripHtml(j.description).toLowerCase().slice(0, 1000).includes(kw)
     )
   } catch {
     return []
   }
+}
+
+async function fetchArbeitNow(keyword: string, page: number): Promise<JobListing[]> {
+  // Fetch two pages in parallel for better keyword coverage
+  const [p1, p2] = await Promise.all([
+    fetchArbeitNowPage(keyword, page),
+    keyword.trim() ? fetchArbeitNowPage(keyword, page + 1) : Promise.resolve([]),
+  ])
+  const seen = new Set<string>()
+  return [...p1, ...p2].filter(j => {
+    if (seen.has(j.id)) return false
+    seen.add(j.id)
+    return true
+  })
 }
 
 // ── Fetch from Arbeitsagentur ─────────────────────────────────────────────────
