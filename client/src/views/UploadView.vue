@@ -134,9 +134,9 @@ async function handleFileSelected(file: File) {
   }
 }
 
-function handleSave() {
+async function handleSave() {
   if (parsedProfile.value) {
-    saveProfile(parsedProfile.value)
+    await saveProfile(parsedProfile.value)
     router.push('/')
   }
 }

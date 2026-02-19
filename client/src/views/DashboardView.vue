@@ -21,7 +21,7 @@ function formatDate(iso: string) {
 async function handleDownload(session: any) {
   try {
     await downloadPdf(session.tailoredProfile)
-    createFromSession(session.id, session.company, session.jobTitle)
+    await createFromSession(session.id, session.company, session.jobTitle)
   } catch (err: any) {
     alert(err.message || 'PDF download failed')
   }

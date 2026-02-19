@@ -127,13 +127,13 @@ async function handleDownload() {
     // Auto-log the application
     if (savedSessionId.value) {
       // Session already saved — link to it (no-op if already exists)
-      createFromSession(savedSessionId.value, jobContext.company || 'Unknown', jobContext.jobTitle || 'Unknown')
+      await createFromSession(savedSessionId.value, jobContext.company || 'Unknown', jobContext.jobTitle || 'Unknown')
     } else if (!downloadedAppId.value) {
       // Not yet saved as a session — create a standalone entry
-      const app = addApplication({
+      const app = await addApplication({
         company: jobContext.company || 'Unknown',
         jobTitle: jobContext.jobTitle || 'Unknown',
-        appliedDate: new Date().toISOString().split('T')[0],
+        appliedDate: new Date().toISOString().split('T')[0]!,
         status: 'gesendet',
       })
       downloadedAppId.value = app.id
@@ -145,7 +145,7 @@ async function handleDownload() {
   }
 }
 
-function handleSaveSession() {
+async function handleSaveSession() {
   if (!tailoredProfile.value || !profile.value) return
 
   const session: TailoredSession = {
@@ -166,7 +166,7 @@ function handleSaveSession() {
 
   // If already downloaded (standalone entry exists), link it to the session
   if (downloadedAppId.value) {
-    linkSession(downloadedAppId.value, session.id)
+    await linkSession(downloadedAppId.value, session.id)
   }
 }
 </script>

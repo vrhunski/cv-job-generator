@@ -1,30 +1,52 @@
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import type { CVProfile } from '../../../shared/types'
 
-const STORAGE_KEY = 'cv-profile'
+const profile = ref<CVProfile | null>(null)
+const profileLoading = ref(false)
 
-function loadProfile(): CVProfile | null {
-  const raw = localStorage.getItem(STORAGE_KEY)
-  if (!raw) return null
+async function fetchProfile() {
+  profileLoading.value = true
   try {
-    return JSON.parse(raw)
+    const res = await fetch('/api/profile')
+    if (res.status === 404) { profile.value = null; return }
+    if (!res.ok) return
+    profile.value = await res.json()
   } catch {
-    return null
+    profile.value = null
+  } finally {
+    profileLoading.value = false
   }
 }
 
-const profile = ref<CVProfile | null>(loadProfile())
+fetchProfile()
 
 export function useProfile() {
-  function saveProfile(p: CVProfile) {
+  async function saveProfile(p: CVProfile) {
     p.updatedAt = new Date().toISOString()
-    profile.value = p
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(p))
+    const res = await fetch('/api/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p),
+    })
+    if (res.ok) {
+      profile.value = await res.json()
+    }
   }
 
-  function clearProfile() {
+  async function updateProfile(patch: Partial<CVProfile>) {
+    const res = await fetch('/api/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+    if (res.ok) {
+      profile.value = await res.json()
+    }
+  }
+
+  async function clearProfile() {
+    await fetch('/api/profile', { method: 'DELETE' })
     profile.value = null
-    localStorage.removeItem(STORAGE_KEY)
   }
 
   function hasProfile(): boolean {
@@ -33,8 +55,11 @@ export function useProfile() {
 
   return {
     profile,
+    profileLoading,
     saveProfile,
+    updateProfile,
     clearProfile,
     hasProfile,
+    fetchProfile,
   }
 }

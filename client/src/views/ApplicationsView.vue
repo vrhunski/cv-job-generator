@@ -15,13 +15,13 @@ const { settings: bridge, updateSettings: updateBridge } = useBridgeSettings()
 const showAddForm = ref(false)
 const form = ref({ company: '', jobTitle: '', appliedDate: todayStr(), status: 'gesendet' as ApplicationStatus, notes: '' })
 
-function todayStr() {
-  return new Date().toISOString().split('T')[0]
+function todayStr(): string {
+  return new Date().toISOString().split('T')[0]!
 }
 
-function submitAdd() {
+async function submitAdd() {
   if (!form.value.company.trim() || !form.value.jobTitle.trim()) return
-  addApplication({ ...form.value })
+  await addApplication({ ...form.value })
   form.value = { company: '', jobTitle: '', appliedDate: todayStr(), status: 'gesendet', notes: '' }
   showAddForm.value = false
 }
@@ -35,8 +35,8 @@ function startEdit(app: JobApplication) {
   editForm.value = { company: app.company, jobTitle: app.jobTitle, appliedDate: app.appliedDate, status: app.status, notes: app.notes || '' }
 }
 
-function saveEdit(id: string) {
-  updateApplication(id, { ...editForm.value })
+async function saveEdit(id: string) {
+  await updateApplication(id, { ...editForm.value })
   editingId.value = null
 }
 
@@ -47,10 +47,10 @@ function cancelEdit() {
 // ── Status cycling ───────────────────────────────────────────────────────────
 const STATUS_CYCLE: ApplicationStatus[] = ['gesendet', 'in_bearbeitung', 'abgelehnt', 'eingestellt']
 
-function cycleStatus(app: JobApplication) {
+async function cycleStatus(app: JobApplication) {
   const idx = STATUS_CYCLE.indexOf(app.status)
-  const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length]
-  updateStatus(app.id, next)
+  const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length]!
+  await updateStatus(app.id, next)
 }
 
 // ── Status display ───────────────────────────────────────────────────────────
@@ -185,26 +185,24 @@ async function fetchPreview() {
   }
 }
 
-function confirmImport() {
+async function confirmImport() {
   const toImport = previewEmails.value.filter((e) => e.selected)
-  let imported = 0
   for (const email of toImport) {
     const company = (email.company || '').trim() || 'Unbekannt'
     const jobTitle = (email.jobTitle || '').trim() || 'Unbekannt'
-    const appliedDate = email.date || todayStr()
+    const appliedDate: string = email.date || todayStr()
     // Deduplicate by date + company
     const duplicate = applications.value.some(
       (a) => a.appliedDate === appliedDate && a.company.toLowerCase() === company.toLowerCase()
     )
     if (duplicate) continue
-    addApplication({
+    await addApplication({
       company,
       jobTitle,
       appliedDate,
       status: 'gesendet',
       senderEmail: email.senderEmail || undefined,
     })
-    imported++
   }
   closeImport()
 }
