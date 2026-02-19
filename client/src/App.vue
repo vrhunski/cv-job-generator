@@ -3,9 +3,17 @@ import { onMounted } from 'vue'
 import { RouterView } from 'vue-router'
 import AppHeader from '@/components/common/AppHeader.vue'
 import { migrateFromLocalStorage } from '@/utils/migrateFromLocalStorage'
+import { useProfile } from '@/composables/useProfile'
+import { useApplications } from '@/composables/useApplications'
+
+const { fetchProfile } = useProfile()
+const { fetchApplications } = useApplications()
 
 onMounted(async () => {
   await migrateFromLocalStorage()
+  // Always re-fetch after migration: module-level fetchProfile() ran before
+  // migration completed, so reactive state needs refreshing.
+  await Promise.all([fetchProfile(), fetchApplications()])
 })
 </script>
 

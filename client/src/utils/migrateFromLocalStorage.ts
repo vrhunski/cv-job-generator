@@ -1,4 +1,4 @@
-const MIGRATION_KEY = 'cv-ls-migrated-v1'
+const MIGRATION_KEY = 'cv-ls-migrated-v2'
 
 export async function migrateFromLocalStorage() {
   if (localStorage.getItem(MIGRATION_KEY)) return  // already done
