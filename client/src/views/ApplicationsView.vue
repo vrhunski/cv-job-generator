@@ -59,10 +59,10 @@ async function cycleStatus(app: JobApplication) {
 
 // ── Status display ───────────────────────────────────────────────────────────
 const STATUS_LABELS: Record<ApplicationStatus, string> = {
-  gesendet: 'Gesendet',
-  in_bearbeitung: 'In Bearbeitung',
-  abgelehnt: 'Abgelehnt',
-  eingestellt: 'Eingestellt',
+  gesendet: 'Sent',
+  in_bearbeitung: 'In Progress',
+  abgelehnt: 'Rejected',
+  eingestellt: 'Hired',
 }
 
 const STATUS_CLASS: Record<ApplicationStatus, string> = {
@@ -153,10 +153,10 @@ async function loadFolders() {
       body: JSON.stringify({ host: bridge.host, port: bridge.port, username: bridge.username, password: bridge.password }),
     })
     const data = await res.json()
-    if (!res.ok) { importError.value = data.error || 'Fehler beim Laden der Ordner'; return }
+    if (!res.ok) { importError.value = data.error || 'Failed to load folders'; return }
     availableFolders.value = data.folders
   } catch {
-    importError.value = 'Netzwerkfehler'
+    importError.value = 'Network error'
   } finally {
     loadingFolders.value = false
   }
@@ -169,7 +169,6 @@ function closeImport() {
 function getAiConfig() {
   const p = aiSettings.provider
   if (p === 'puter') {
-    // Puter runs client-side; fall back to gemini if no server-side provider configured
     return { provider: 'gemini', apiKey: aiSettings.geminiKey, model: aiSettings.geminiModel }
   }
   if (p === 'anthropic') return { provider: 'anthropic', apiKey: aiSettings.anthropicKey, model: aiSettings.anthropicModel }
@@ -180,12 +179,11 @@ function getAiConfig() {
 async function fetchPreview() {
   importError.value = ''
   importing.value = true
-  // Save bridge settings for next time
   updateBridge({ ...bridge })
   try {
     const ai = getAiConfig()
     if (!ai.apiKey) {
-      importError.value = 'Kein AI-API-Key in den Einstellungen konfiguriert.'
+      importError.value = 'No AI API key configured in Settings.'
       return
     }
     const res = await fetch('/api/mail/import-preview', {
@@ -204,17 +202,17 @@ async function fetchPreview() {
     })
     const data = await res.json()
     if (!res.ok) {
-      importError.value = data.error || 'Verbindungsfehler'
+      importError.value = data.error || 'Connection error'
       return
     }
     aiError.value = data.aiError || null
     previewEmails.value = (data.emails as PreviewEmail[]).map((e) => ({
       ...e,
-      selected: true, // select all — user can uncheck
+      selected: true,
     }))
     importStep.value = 2
   } catch {
-    importError.value = 'Netzwerkfehler — läuft der Server?'
+    importError.value = 'Network error — is the server running?'
   } finally {
     importing.value = false
   }
@@ -223,10 +221,9 @@ async function fetchPreview() {
 async function confirmImport() {
   const toImport = previewEmails.value.filter((e) => e.selected)
   for (const email of toImport) {
-    const company = (email.company || '').trim() || 'Unbekannt'
-    const jobTitle = (email.jobTitle || '').trim() || 'Unbekannt'
+    const company = (email.company || '').trim() || 'Unknown'
+    const jobTitle = (email.jobTitle || '').trim() || 'Unknown'
     const appliedDate: string = email.date || todayStr()
-    // Deduplicate by date + company
     const duplicate = applications.value.some(
       (a) => a.appliedDate === appliedDate && a.company.toLowerCase() === company.toLowerCase()
     )
@@ -259,20 +256,20 @@ async function exportPdf() {
       }),
     })
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Fehler beim PDF-Export' }))
-      throw new Error(err.error || 'Fehler beim PDF-Export')
+      const err = await res.json().catch(() => ({ error: 'PDF export failed' }))
+      throw new Error(err.error || 'PDF export failed')
     }
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'Bewerbungsnachweis.pdf'
+    a.download = 'Applications_Report.pdf'
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
   } catch (err: any) {
-    exportError.value = err.message || 'PDF-Export fehlgeschlagen'
+    exportError.value = err.message || 'PDF export failed'
   } finally {
     exporting.value = false
   }
@@ -283,18 +280,18 @@ async function exportPdf() {
   <div class="applications-view">
     <div class="page-header">
       <div>
-        <h1>Bewerbungen</h1>
-        <p class="subtitle">Nachweisliste für das Arbeit Zentrum</p>
+        <h1>Applications</h1>
+        <p class="subtitle">Proof of applications for the job center</p>
       </div>
       <div class="header-actions">
         <button class="btn btn-secondary" @click="showAddForm = !showAddForm">
-          + Bewerbung hinzufügen
+          + Add Application
         </button>
         <button class="btn btn-secondary" @click="openImport">
-          Import aus Proton Mail
+          Import from Proton Mail
         </button>
         <button class="btn btn-primary" :disabled="exporting || applications.length === 0" @click="exportPdf">
-          {{ exporting ? 'Exportiere…' : 'PDF exportieren' }}
+          {{ exporting ? 'Exporting…' : 'Export PDF' }}
         </button>
       </div>
     </div>
@@ -303,37 +300,37 @@ async function exportPdf() {
 
     <!-- Add form -->
     <div v-if="showAddForm" class="card add-form">
-      <h3>Neue Bewerbung</h3>
+      <h3>New Application</h3>
       <div class="form-grid">
         <div class="form-group">
-          <label>Firma *</label>
-          <input v-model="form.company" type="text" placeholder="z.B. Siemens AG" />
+          <label>Company *</label>
+          <input v-model="form.company" type="text" placeholder="e.g. Siemens AG" />
         </div>
         <div class="form-group">
-          <label>Stelle *</label>
-          <input v-model="form.jobTitle" type="text" placeholder="z.B. Backend Developer" />
+          <label>Job Title *</label>
+          <input v-model="form.jobTitle" type="text" placeholder="e.g. Backend Developer" />
         </div>
         <div class="form-group">
-          <label>Datum</label>
+          <label>Date</label>
           <input v-model="form.appliedDate" type="date" />
         </div>
         <div class="form-group">
           <label>Status</label>
           <select v-model="form.status">
-            <option value="gesendet">Gesendet</option>
-            <option value="in_bearbeitung">In Bearbeitung</option>
-            <option value="abgelehnt">Abgelehnt</option>
-            <option value="eingestellt">Eingestellt</option>
+            <option value="gesendet">Sent</option>
+            <option value="in_bearbeitung">In Progress</option>
+            <option value="abgelehnt">Rejected</option>
+            <option value="eingestellt">Hired</option>
           </select>
         </div>
         <div class="form-group form-group-full">
-          <label>Notizen</label>
+          <label>Notes</label>
           <input v-model="form.notes" type="text" placeholder="Optional" />
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-primary" @click="submitAdd">Hinzufügen</button>
-        <button class="btn btn-secondary" @click="showAddForm = false">Abbrechen</button>
+        <button class="btn btn-primary" @click="submitAdd">Add</button>
+        <button class="btn btn-secondary" @click="showAddForm = false">Cancel</button>
       </div>
     </div>
 
@@ -341,8 +338,8 @@ async function exportPdf() {
     <div v-if="showImportPanel" class="card import-panel">
       <!-- Step 1: credentials -->
       <div v-if="importStep === 1">
-        <h3>Import aus Proton Mail</h3>
-        <p class="import-hint">Proton Bridge muss laufen. IMAP-Zugangsdaten aus der Bridge-App entnehmen.</p>
+        <h3>Import from Proton Mail</h3>
+        <p class="import-hint">Proton Bridge must be running. Use the IMAP credentials from the Bridge app.</p>
         <div class="form-grid">
           <div class="form-group">
             <label>IMAP Host</label>
@@ -353,15 +350,15 @@ async function exportPdf() {
             <input :value="bridge.port" type="number" @input="updateBridge({ port: Number(($event.target as HTMLInputElement).value) })" placeholder="1143" />
           </div>
           <div class="form-group form-group-full">
-            <label>Benutzername</label>
-            <input :value="bridge.username" @input="updateBridge({ username: ($event.target as HTMLInputElement).value })" placeholder="Aus Bridge-App" autocomplete="username" />
+            <label>Username</label>
+            <input :value="bridge.username" @input="updateBridge({ username: ($event.target as HTMLInputElement).value })" placeholder="From Bridge app" autocomplete="username" />
           </div>
           <div class="form-group form-group-full">
-            <label>Passwort</label>
-            <input :value="bridge.password" type="password" @input="updateBridge({ password: ($event.target as HTMLInputElement).value })" placeholder="Aus Bridge-App" autocomplete="current-password" />
+            <label>Password</label>
+            <input :value="bridge.password" type="password" @input="updateBridge({ password: ($event.target as HTMLInputElement).value })" placeholder="From Bridge app" autocomplete="current-password" />
           </div>
           <div class="form-group form-group-full">
-            <label>Ordner / Label</label>
+            <label>Folder / Label</label>
             <div class="folder-row">
               <select
                 v-if="availableFolders.length > 0"
@@ -379,41 +376,41 @@ async function exportPdf() {
                 class="folder-input"
               />
               <button class="btn btn-sm btn-secondary" :disabled="loadingFolders || !bridge.username || !bridge.password" @click="loadFolders">
-                {{ loadingFolders ? '…' : 'Ordner laden' }}
+                {{ loadingFolders ? '…' : 'Load folders' }}
               </button>
             </div>
-            <small class="hint" v-if="availableFolders.length === 0">Klicke "Ordner laden" um verfügbare IMAP-Ordner anzuzeigen</small>
+            <small class="hint" v-if="availableFolders.length === 0">Click "Load folders" to see available IMAP folders</small>
           </div>
         </div>
         <p v-if="importError" class="error-msg">{{ importError }}</p>
         <div class="form-actions">
           <button class="btn btn-primary" :disabled="importing" @click="fetchPreview">
-            {{ importing ? 'Verbinde…' : 'Verbinden & Vorschau laden' }}
+            {{ importing ? 'Connecting…' : 'Connect & Load Preview' }}
           </button>
-          <button class="btn btn-secondary" @click="closeImport">Abbrechen</button>
+          <button class="btn btn-secondary" @click="closeImport">Cancel</button>
         </div>
       </div>
 
       <!-- Step 2: preview -->
       <div v-if="importStep === 2">
-        <h3>Vorschau — {{ previewEmails.length }} E-Mail{{ previewEmails.length !== 1 ? 's' : '' }} gefunden</h3>
+        <h3>Preview — {{ previewEmails.length }} email{{ previewEmails.length !== 1 ? 's' : '' }} found</h3>
 
         <div v-if="aiError" class="ai-error-banner">
-          ⚠ AI-Extraktion fehlgeschlagen: {{ aiError }}<br>
-          <small>Firma und Stelle können manuell eingetragen werden.</small>
+          ⚠ AI extraction failed: {{ aiError }}<br>
+          <small>Company and job title can be entered manually.</small>
         </div>
-        <p v-else class="import-hint">Firma und Stelle können direkt in der Tabelle bearbeitet werden.</p>
+        <p v-else class="import-hint">Company and job title can be edited directly in the table.</p>
 
         <div class="table-wrapper preview-table-wrapper">
           <table class="applications-table preview-table">
             <thead>
               <tr>
                 <th style="width:36px"></th>
-                <th>Datum</th>
-                <th>E-Mail Betreff</th>
-                <th>Absender</th>
-                <th>Firma</th>
-                <th>Stelle</th>
+                <th>Date</th>
+                <th>Email Subject</th>
+                <th>Sender</th>
+                <th>Company</th>
+                <th>Job Title</th>
               </tr>
             </thead>
             <tbody>
@@ -426,26 +423,26 @@ async function exportPdf() {
                 <td class="col-date">{{ email.date ? formatDate(email.date) : '–' }}</td>
                 <td class="col-subject" :title="email.raw">{{ email.raw || '–' }}</td>
                 <td class="col-sender">{{ email.senderEmail || '–' }}</td>
-                <td><input v-model="email.company" class="preview-edit" placeholder="Firma" /></td>
-                <td><input v-model="email.jobTitle" class="preview-edit" placeholder="Stelle" /></td>
+                <td><input v-model="email.company" class="preview-edit" placeholder="Company" /></td>
+                <td><input v-model="email.jobTitle" class="preview-edit" placeholder="Job Title" /></td>
               </tr>
             </tbody>
           </table>
         </div>
         <div class="form-actions" style="margin-top: 16px">
           <button class="btn btn-primary" :disabled="selectedCount === 0" @click="confirmImport">
-            Importieren ({{ selectedCount }})
+            Import ({{ selectedCount }})
           </button>
-          <button class="btn btn-secondary" @click="importStep = 1">Zurück</button>
-          <button class="btn btn-secondary" @click="closeImport">Abbrechen</button>
+          <button class="btn btn-secondary" @click="importStep = 1">Back</button>
+          <button class="btn btn-secondary" @click="closeImport">Cancel</button>
         </div>
       </div>
     </div>
 
     <!-- Empty state -->
     <div v-if="applications.length === 0" class="card empty-state">
-      <p>Noch keine Bewerbungen eingetragen.</p>
-      <p class="muted">Bewerbungen werden automatisch hinzugefügt, wenn du einen Lebenslauf herunterlädst, oder du kannst sie manuell hinzufügen.</p>
+      <p>No applications added yet.</p>
+      <p class="muted">Applications are added automatically when you download a tailored CV, or you can add them manually.</p>
     </div>
 
     <!-- Table -->
@@ -453,19 +450,19 @@ async function exportPdf() {
       <table class="applications-table">
         <thead>
           <tr>
-            <th>Nr.</th>
+            <th>No.</th>
             <th class="th-sortable" :class="{ 'th-active': sortKey === 'appliedDate' }" @click="setSort('appliedDate')">
-              Datum <span class="sort-arrow" :class="{ 'arrow-active': sortKey === 'appliedDate' }">{{ sortArrow('appliedDate') }}</span>
+              Date <span class="sort-arrow" :class="{ 'arrow-active': sortKey === 'appliedDate' }">{{ sortArrow('appliedDate') }}</span>
             </th>
             <th class="th-sortable" :class="{ 'th-active': sortKey === 'company' }" @click="setSort('company')">
-              Firma <span class="sort-arrow" :class="{ 'arrow-active': sortKey === 'company' }">{{ sortArrow('company') }}</span>
+              Company <span class="sort-arrow" :class="{ 'arrow-active': sortKey === 'company' }">{{ sortArrow('company') }}</span>
             </th>
-            <th>Stelle</th>
-            <th>Kontakt</th>
+            <th>Job Title</th>
+            <th>Contact</th>
             <th class="th-sortable" :class="{ 'th-active': sortKey === 'status' }" @click="setSort('status')">
               Status <span class="sort-arrow" :class="{ 'arrow-active': sortKey === 'status' }">{{ sortArrow('status') }}</span>
             </th>
-            <th>Aktionen</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -475,7 +472,7 @@ async function exportPdf() {
               <td class="col-date">{{ formatDate(app.appliedDate) }}</td>
               <td class="col-company">
                 {{ app.company }}
-                <span v-if="app.sessionId" class="cv-badge" title="Aus CV-Session erstellt">CV</span>
+                <span v-if="app.sessionId" class="cv-badge" title="Created from CV session">CV</span>
               </td>
               <td class="col-title">{{ app.jobTitle }}</td>
               <td class="col-sender-email">
@@ -486,15 +483,15 @@ async function exportPdf() {
                 <button
                   class="status-badge"
                   :class="STATUS_CLASS[app.status]"
-                  :title="'Klicken zum Ändern'"
+                  :title="'Click to change'"
                   @click="cycleStatus(app)"
                 >
                   {{ STATUS_LABELS[app.status] }}
                 </button>
               </td>
               <td class="col-actions">
-                <button class="btn btn-sm btn-secondary" @click="openEditModal(app)">Bearbeiten</button>
-                <button class="btn btn-sm btn-danger" @click="deleteApplication(app.id)">Löschen</button>
+                <button class="btn btn-sm btn-secondary" @click="openEditModal(app)">Edit</button>
+                <button class="btn btn-sm btn-danger" @click="deleteApplication(app.id)">Delete</button>
               </td>
             </tr>
             <!-- Notes sub-row -->
@@ -506,7 +503,7 @@ async function exportPdf() {
         </tbody>
         <tfoot>
           <tr>
-            <td colspan="7" class="total-row">Gesamt: {{ applications.length }} Bewerbung{{ applications.length !== 1 ? 'en' : '' }}</td>
+            <td colspan="7" class="total-row">Total: {{ applications.length }} application{{ applications.length !== 1 ? 's' : '' }}</td>
           </tr>
         </tfoot>
       </table>
@@ -518,42 +515,42 @@ async function exportPdf() {
     <div v-if="editModalApp" class="modal-backdrop" @click.self="closeEditModal" @keydown.esc="closeEditModal">
       <div class="modal" @keydown.ctrl.enter="saveEditModal">
         <div class="modal-header">
-          <h3>Bewerbung bearbeiten</h3>
+          <h3>Edit Application</h3>
           <button class="modal-close" @click="closeEditModal">×</button>
         </div>
         <div class="modal-body">
           <div class="form-grid">
             <div class="form-group">
-              <label>Firma *</label>
-              <input v-model="editModalForm.company" type="text" placeholder="z.B. Siemens AG" />
+              <label>Company *</label>
+              <input v-model="editModalForm.company" type="text" placeholder="e.g. Siemens AG" />
             </div>
             <div class="form-group">
-              <label>Stelle *</label>
-              <input v-model="editModalForm.jobTitle" type="text" placeholder="z.B. Backend Developer" />
+              <label>Job Title *</label>
+              <input v-model="editModalForm.jobTitle" type="text" placeholder="e.g. Backend Developer" />
             </div>
             <div class="form-group">
-              <label>Datum</label>
+              <label>Date</label>
               <input v-model="editModalForm.appliedDate" type="date" />
             </div>
             <div class="form-group">
               <label>Status</label>
               <select v-model="editModalForm.status">
-                <option value="gesendet">Gesendet</option>
-                <option value="in_bearbeitung">In Bearbeitung</option>
-                <option value="abgelehnt">Abgelehnt</option>
-                <option value="eingestellt">Eingestellt</option>
+                <option value="gesendet">Sent</option>
+                <option value="in_bearbeitung">In Progress</option>
+                <option value="abgelehnt">Rejected</option>
+                <option value="eingestellt">Hired</option>
               </select>
             </div>
             <div class="form-group form-group-full">
-              <label>Notizen</label>
+              <label>Notes</label>
               <textarea v-model="editModalForm.notes" rows="3" placeholder="Optional"></textarea>
             </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="closeEditModal">Abbrechen</button>
+          <button class="btn btn-secondary" @click="closeEditModal">Cancel</button>
           <button class="btn btn-primary" :disabled="editSaving" @click="saveEditModal">
-            {{ editSaving ? 'Speichere…' : 'Speichern' }}
+            {{ editSaving ? 'Saving…' : 'Save' }}
           </button>
         </div>
       </div>

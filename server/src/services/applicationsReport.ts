@@ -6,10 +6,10 @@ import type { JobApplication } from '../../../shared/types'
 const TEMPLATE_PATH = path.join(__dirname, '..', 'templates', 'bewerbungsnachweis.html')
 
 const STATUS_LABELS: Record<string, string> = {
-  gesendet: 'Gesendet',
-  in_bearbeitung: 'In Bearbeitung',
-  abgelehnt: 'Abgelehnt',
-  eingestellt: 'Eingestellt',
+  gesendet: 'Sent',
+  in_bearbeitung: 'In Progress',
+  abgelehnt: 'Rejected',
+  eingestellt: 'Hired',
 }
 
 function escapeHtml(str: string): string {
@@ -65,7 +65,7 @@ export async function generateApplicationsPdf(
 
   const rows = sorted.map((app, idx) => renderRow(app, idx)).join('\n')
   const total = applications.length
-  const totalSuffix = total !== 1 ? 'en' : ''
+  const totalSuffix = total !== 1 ? 's' : ''
   const createdAt = formatDate(new Date().toISOString().split('T')[0])
 
   const html = template

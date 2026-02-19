@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bewerbungsnachweis</title>
+  <title>Applications Report</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -128,20 +128,20 @@
 </head>
 <body>
   <div class="report-header">
-    <div class="report-title">Bewerbungsnachweis</div>
+    <div class="report-title">Applications Report</div>
     <div class="report-meta">
       <div><strong>Name:</strong> {{fullName}}</div>
-      <div><strong>Zeitraum:</strong> {{dateFrom}} – {{dateTo}}</div>
+      <div><strong>Period:</strong> {{dateFrom}} – {{dateTo}}</div>
     </div>
   </div>
 
   <table>
     <thead>
       <tr>
-        <th class="col-nr">Nr.</th>
-        <th class="col-date">Datum</th>
-        <th>Firma</th>
-        <th>Stelle</th>
+        <th class="col-nr">No.</th>
+        <th class="col-date">Date</th>
+        <th>Company</th>
+        <th>Job Title</th>
         <th class="col-status">Status</th>
       </tr>
     </thead>
@@ -151,8 +151,8 @@
   </table>
 
   <div class="report-footer">
-    <span class="total">Gesamt: {{total}} Bewerbung{{totalSuffix}}</span>
-    <span>Erstellt am: {{createdAt}}</span>
+    <span class="total">Total: {{total}} application{{totalSuffix}}</span>
+    <span>Generated: {{createdAt}}</span>
   </div>
 </body>
 </html>
