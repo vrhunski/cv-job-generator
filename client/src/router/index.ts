@@ -5,8 +5,8 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'dashboard',
-      component: () => import('@/views/DashboardView.vue'),
+      name: 'jobs',
+      component: () => import('@/views/JobSearchView.vue'),
     },
     {
       path: '/upload',
@@ -29,9 +29,9 @@ const router = createRouter({
       component: () => import('@/views/ApplicationsView.vue'),
     },
     {
-      path: '/jobs',
-      name: 'jobs',
-      component: () => import('@/views/JobSearchView.vue'),
+      path: '/dashboard',
+      name: 'dashboard',
+      component: () => import('@/views/DashboardView.vue'),
     },
   ],
 })

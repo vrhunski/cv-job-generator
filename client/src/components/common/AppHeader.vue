@@ -11,12 +11,12 @@ const showSettings = ref(false)
     <div class="header-inner container">
       <RouterLink to="/" class="logo">CV Tailor</RouterLink>
       <nav>
-        <RouterLink to="/">Dashboard</RouterLink>
+        <RouterLink to="/">Jobs</RouterLink>
         <RouterLink to="/upload">Upload CV</RouterLink>
         <RouterLink to="/tailor">Tailor</RouterLink>
         <RouterLink to="/preview">Preview</RouterLink>
         <RouterLink to="/applications">Bewerbungen</RouterLink>
-        <RouterLink to="/jobs">Jobs</RouterLink>
+        <RouterLink to="/dashboard">Dashboard</RouterLink>
       </nav>
       <button class="btn btn-sm btn-secondary" @click="showSettings = true">Settings</button>
     </div>
