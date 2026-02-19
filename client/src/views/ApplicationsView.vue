@@ -26,22 +26,26 @@ async function submitAdd() {
   showAddForm.value = false
 }
 
-// ── Inline edit ─────────────────────────────────────────────────────────────
-const editingId = ref<string | null>(null)
-const editForm = ref({ company: '', jobTitle: '', appliedDate: '', status: 'gesendet' as ApplicationStatus, notes: '' })
+// ── Edit modal ───────────────────────────────────────────────────────────────
+const editModalApp = ref<JobApplication | null>(null)
+const editModalForm = ref({ company: '', jobTitle: '', appliedDate: '', status: 'gesendet' as ApplicationStatus, notes: '' })
+const editSaving = ref(false)
 
-function startEdit(app: JobApplication) {
-  editingId.value = app.id
-  editForm.value = { company: app.company, jobTitle: app.jobTitle, appliedDate: app.appliedDate, status: app.status, notes: app.notes || '' }
+function openEditModal(app: JobApplication) {
+  editModalApp.value = app
+  editModalForm.value = { company: app.company, jobTitle: app.jobTitle, appliedDate: app.appliedDate, status: app.status, notes: app.notes || '' }
 }
 
-async function saveEdit(id: string) {
-  await updateApplication(id, { ...editForm.value })
-  editingId.value = null
+function closeEditModal() {
+  editModalApp.value = null
 }
 
-function cancelEdit() {
-  editingId.value = null
+async function saveEditModal() {
+  if (!editModalApp.value) return
+  editSaving.value = true
+  await updateApplication(editModalApp.value.id, { ...editModalForm.value })
+  editSaving.value = false
+  closeEditModal()
 }
 
 // ── Status cycling ───────────────────────────────────────────────────────────
@@ -69,9 +73,40 @@ const STATUS_CLASS: Record<ApplicationStatus, string> = {
 }
 
 // ── Sorting ──────────────────────────────────────────────────────────────────
-const sorted = computed(() =>
-  [...applications.value].sort((a, b) => b.appliedDate.localeCompare(a.appliedDate))
-)
+type SortKey = 'appliedDate' | 'company' | 'status'
+const sortKey = ref<SortKey>('appliedDate')
+const sortDir = ref<'asc' | 'desc'>('desc')
+
+const STATUS_ORDER: Record<ApplicationStatus, number> = {
+  gesendet: 0,
+  in_bearbeitung: 1,
+  eingestellt: 2,
+  abgelehnt: 3,
+}
+
+function setSort(key: SortKey) {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = key
+    sortDir.value = 'desc'
+  }
+}
+
+function sortArrow(key: SortKey): string {
+  if (sortKey.value !== key) return '↕'
+  return sortDir.value === 'asc' ? '↑' : '↓'
+}
+
+const sorted = computed(() => {
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  return [...applications.value].sort((a, b) => {
+    if (sortKey.value === 'appliedDate') return dir * a.appliedDate.localeCompare(b.appliedDate)
+    if (sortKey.value === 'company') return dir * a.company.localeCompare(b.company, undefined, { sensitivity: 'base' })
+    if (sortKey.value === 'status') return dir * (STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
+    return 0
+  })
+})
 
 // ── Date format ──────────────────────────────────────────────────────────────
 function formatDate(iso: string) {
@@ -419,18 +454,23 @@ async function exportPdf() {
         <thead>
           <tr>
             <th>Nr.</th>
-            <th>Datum</th>
-            <th>Firma</th>
+            <th class="th-sortable" :class="{ 'th-active': sortKey === 'appliedDate' }" @click="setSort('appliedDate')">
+              Datum <span class="sort-arrow" :class="{ 'arrow-active': sortKey === 'appliedDate' }">{{ sortArrow('appliedDate') }}</span>
+            </th>
+            <th class="th-sortable" :class="{ 'th-active': sortKey === 'company' }" @click="setSort('company')">
+              Firma <span class="sort-arrow" :class="{ 'arrow-active': sortKey === 'company' }">{{ sortArrow('company') }}</span>
+            </th>
             <th>Stelle</th>
             <th>Kontakt</th>
-            <th>Status</th>
+            <th class="th-sortable" :class="{ 'th-active': sortKey === 'status' }" @click="setSort('status')">
+              Status <span class="sort-arrow" :class="{ 'arrow-active': sortKey === 'status' }">{{ sortArrow('status') }}</span>
+            </th>
             <th>Aktionen</th>
           </tr>
         </thead>
         <tbody>
           <template v-for="(app, idx) in sorted" :key="app.id">
-            <!-- View row -->
-            <tr v-if="editingId !== app.id">
+            <tr>
               <td class="col-nr">{{ idx + 1 }}</td>
               <td class="col-date">{{ formatDate(app.appliedDate) }}</td>
               <td class="col-company">
@@ -453,32 +493,12 @@ async function exportPdf() {
                 </button>
               </td>
               <td class="col-actions">
-                <button class="btn btn-sm btn-secondary" @click="startEdit(app)">Bearbeiten</button>
+                <button class="btn btn-sm btn-secondary" @click="openEditModal(app)">Bearbeiten</button>
                 <button class="btn btn-sm btn-danger" @click="deleteApplication(app.id)">Löschen</button>
               </td>
             </tr>
-            <!-- Edit row -->
-            <tr v-else class="edit-row">
-              <td>{{ idx + 1 }}</td>
-              <td><input v-model="editForm.appliedDate" type="date" class="edit-input" /></td>
-              <td><input v-model="editForm.company" type="text" class="edit-input" /></td>
-              <td><input v-model="editForm.jobTitle" type="text" class="edit-input" /></td>
-              <td><span class="muted" style="font-size:11px">{{ sorted[idx]?.senderEmail || '–' }}</span></td>
-              <td>
-                <select v-model="editForm.status" class="edit-select">
-                  <option value="gesendet">Gesendet</option>
-                  <option value="in_bearbeitung">In Bearbeitung</option>
-                  <option value="abgelehnt">Abgelehnt</option>
-                  <option value="eingestellt">Eingestellt</option>
-                </select>
-              </td>
-              <td class="col-actions">
-                <button class="btn btn-sm btn-primary" @click="saveEdit(app.id)">Speichern</button>
-                <button class="btn btn-sm btn-secondary" @click="cancelEdit">Abbrechen</button>
-              </td>
-            </tr>
             <!-- Notes sub-row -->
-            <tr v-if="editingId !== app.id && app.notes" class="notes-row">
+            <tr v-if="app.notes" class="notes-row">
               <td></td>
               <td colspan="6" class="notes-cell">{{ app.notes }}</td>
             </tr>
@@ -492,6 +512,53 @@ async function exportPdf() {
       </table>
     </div>
   </div>
+
+  <!-- Edit modal -->
+  <Teleport to="body">
+    <div v-if="editModalApp" class="modal-backdrop" @click.self="closeEditModal" @keydown.esc="closeEditModal">
+      <div class="modal" @keydown.ctrl.enter="saveEditModal">
+        <div class="modal-header">
+          <h3>Bewerbung bearbeiten</h3>
+          <button class="modal-close" @click="closeEditModal">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Firma *</label>
+              <input v-model="editModalForm.company" type="text" placeholder="z.B. Siemens AG" />
+            </div>
+            <div class="form-group">
+              <label>Stelle *</label>
+              <input v-model="editModalForm.jobTitle" type="text" placeholder="z.B. Backend Developer" />
+            </div>
+            <div class="form-group">
+              <label>Datum</label>
+              <input v-model="editModalForm.appliedDate" type="date" />
+            </div>
+            <div class="form-group">
+              <label>Status</label>
+              <select v-model="editModalForm.status">
+                <option value="gesendet">Gesendet</option>
+                <option value="in_bearbeitung">In Bearbeitung</option>
+                <option value="abgelehnt">Abgelehnt</option>
+                <option value="eingestellt">Eingestellt</option>
+              </select>
+            </div>
+            <div class="form-group form-group-full">
+              <label>Notizen</label>
+              <textarea v-model="editModalForm.notes" rows="3" placeholder="Optional"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="closeEditModal">Abbrechen</button>
+          <button class="btn btn-primary" :disabled="editSaving" @click="saveEditModal">
+            {{ editSaving ? 'Speichere…' : 'Speichern' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -696,20 +763,102 @@ h1 {
   color: #166534;
 }
 
-/* Edit row */
-.edit-row td {
-  background: var(--color-bg-secondary, #f8fafc);
+/* Sortable headers */
+.th-sortable {
+  cursor: pointer;
+  user-select: none;
 }
 
-.edit-input,
-.edit-select {
-  width: 100%;
-  padding: 5px 8px;
+.th-sortable:hover {
+  color: var(--color-text);
+}
+
+.th-active {
+  color: var(--color-text);
+}
+
+.sort-arrow {
+  font-size: 10px;
+  opacity: 0.3;
+  margin-left: 3px;
+}
+
+.arrow-active {
+  opacity: 1;
+}
+
+/* Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--color-bg, #fff);
+  border-radius: 10px;
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 20px 0;
+}
+
+.modal-header h3 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.modal-close:hover {
+  color: var(--color-text);
+}
+
+.modal-body {
+  padding: 16px 20px;
+}
+
+.modal-body .form-group input,
+.modal-body .form-group select,
+.modal-body .form-group textarea {
+  padding: 7px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 5px;
-  font-size: 13px;
+  border-radius: 6px;
+  font-size: 14px;
   background: var(--color-bg);
   color: var(--color-text);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-body .form-group textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 20px 18px;
 }
 
 /* Notes sub-row */
