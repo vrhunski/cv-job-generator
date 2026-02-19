@@ -4,7 +4,7 @@ import { PARSE_CV_SYSTEM, buildParseCVPrompt } from '../prompts/parseCV'
 import { ANALYZE_JOB_SYSTEM, buildAnalyzeJobPrompt } from '../prompts/analyzeJob'
 import { SUGGESTIONS_SYSTEM, buildSuggestionsPrompt } from '../prompts/generateSuggestions'
 
-function extractJson(raw: string): string {
+export function extractJson(raw: string): string {
   const text = raw.trim()
 
   // 1. Extract from code fences

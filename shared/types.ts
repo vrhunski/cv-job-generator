@@ -110,6 +110,26 @@ export type ApplicationStatus =
   | 'abgelehnt'
   | 'eingestellt'
 
+export interface JobListing {
+  id: string
+  source: 'arbeitsagentur' | 'arbeitnow'
+  title: string
+  company: string
+  location: string
+  description: string
+  url: string
+  remote: boolean
+  tags: string[]
+  postedAt?: string
+}
+
+export interface JobFilterResult {
+  id: string
+  germanRequired: boolean   // true = B2+ required (strict), false = accessible
+  distanceKm: number | null // null if remote or geocoding failed
+  remote: boolean
+}
+
 export type SuggestionType =
   | 'align_job_title'
   | 'rewrite_summary_hook'

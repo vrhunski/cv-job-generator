@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProfile } from '@/composables/useProfile'
 import { useSuggestions } from '@/composables/useSuggestions'
+import { useJobSearch } from '@/composables/useJobSearch'
 import { aiSuggest } from '@/services/ai/aiService'
 import JobInput from '@/components/tailoring/JobInput.vue'
 import SuggestionList from '@/components/tailoring/SuggestionList.vue'
@@ -11,6 +12,7 @@ import AiProviderToggle from '@/components/tailoring/AiProviderToggle.vue'
 const router = useRouter()
 const { profile, hasProfile } = useProfile()
 const { totalCount, setSuggestions } = useSuggestions()
+const { selectedJob, clearJob } = useJobSearch()
 
 const jobDescription = ref('')
 const jobTitle = ref('')
@@ -22,6 +24,13 @@ const error = ref('')
 if (!hasProfile()) {
   router.push('/upload')
 }
+
+onMounted(() => {
+  if (selectedJob.value) {
+    jobDescription.value = selectedJob.value.description
+    clearJob()
+  }
+})
 
 async function handleAnalyze() {
   if (!profile.value || !jobDescription.value.trim()) return

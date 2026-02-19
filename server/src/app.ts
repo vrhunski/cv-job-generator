@@ -7,6 +7,7 @@ import aiRouter from './routes/ai'
 import mailRouter from './routes/mail'
 import profileRouter from './routes/profile'
 import applicationsRouter from './routes/applications'
+import jobsRouter from './routes/jobs'
 
 // Run DB migrations before accepting requests
 runMigrations()
@@ -27,6 +28,7 @@ app.use('/api/ai', aiRouter)
 app.use('/api/mail', mailRouter)
 app.use('/api/profile', profileRouter)
 app.use('/api/applications', applicationsRouter)
+app.use('/api/jobs', jobsRouter)
 
 const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
