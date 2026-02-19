@@ -8,6 +8,8 @@ import {
   buildParseCVPrompt,
   ANALYZE_JOB_SYSTEM,
   buildAnalyzeJobPrompt,
+  GAP_ANALYSIS_SYSTEM,
+  buildGapAnalysisPrompt,
   SUGGESTIONS_SYSTEM,
   buildSuggestionsPrompt,
 } from './prompts'
@@ -41,9 +43,15 @@ export async function aiSuggest(
       settings.puterModel
     )
 
+    const gapReport = await puterChat(
+      GAP_ANALYSIS_SYSTEM,
+      buildGapAnalysisPrompt(JSON.stringify(profile), jobAnalysis),
+      settings.puterModel
+    )
+
     const suggestionsRaw = await puterChat(
       SUGGESTIONS_SYSTEM,
-      buildSuggestionsPrompt(JSON.stringify(profile), jobAnalysis, jobDescription),
+      buildSuggestionsPrompt(JSON.stringify(profile), jobAnalysis, jobDescription, gapReport),
       settings.puterModel
     )
 

@@ -3,6 +3,7 @@ import { callAi } from '../services/aiService'
 import { PARSE_CV_SYSTEM, buildParseCVPrompt } from '../prompts/parseCV'
 import { ANALYZE_JOB_SYSTEM, buildAnalyzeJobPrompt } from '../prompts/analyzeJob'
 import { SUGGESTIONS_SYSTEM, buildSuggestionsPrompt } from '../prompts/generateSuggestions'
+import { GAP_ANALYSIS_SYSTEM, buildGapAnalysisPrompt } from '../prompts/gapAnalysis'
 
 export function extractJson(raw: string): string {
   const text = raw.trim()
@@ -89,7 +90,16 @@ router.post('/suggest', async (req, res) => {
       userPrompt: buildAnalyzeJobPrompt(jobDescription),
     })
 
-    // Step 2: Generate suggestions
+    // Step 2: Gap analysis — audit CV against job requirements
+    const gapReport = await callAi({
+      provider,
+      apiKey,
+      model,
+      systemPrompt: GAP_ANALYSIS_SYSTEM,
+      userPrompt: buildGapAnalysisPrompt(JSON.stringify(profile), jobAnalysis),
+    })
+
+    // Step 3: Generate suggestions using gap report as mandatory checklist
     const suggestionsRaw = await callAi({
       provider,
       apiKey,
@@ -98,7 +108,8 @@ router.post('/suggest', async (req, res) => {
       userPrompt: buildSuggestionsPrompt(
         JSON.stringify(profile),
         jobAnalysis,
-        jobDescription
+        jobDescription,
+        gapReport
       ),
     })
 

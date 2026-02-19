@@ -12,13 +12,16 @@ function renderTemplate(html: string, profile: CVProfile): string {
   // Replace simple variables
   const simpleFields = [
     'fullName', 'email', 'phone', 'address', 'linkedin', 'github',
-    'website', 'nationality', 'dateOfBirth', 'gender', 'aboutMe', 'photo',
+    'website', 'nationality', 'dateOfBirth', 'gender', 'photo',
   ] as const
 
   for (const field of simpleFields) {
     const value = profile[field] || ''
     output = output.replace(new RegExp(`\\{\\{${field}\\}\\}`, 'g'), escapeHtml(String(value)))
   }
+
+  // aboutMe supports **bold** markdown for AI-highlighted keywords
+  output = output.replace(/\{\{aboutMe\}\}/g, renderMarkdownBold(escapeHtml(profile.aboutMe || '')))
 
   // Derive currentTitle from first experience
   const currentTitle = profile.experience[0]?.jobTitle || ''
@@ -81,6 +84,16 @@ function processNestedEach(html: string): string {
     // Replace {{this}} with the actual skill value - this will be handled per-item
     return content.replace(/\{\{this\}\}/g, '{{skill}}')
   })
+}
+
+// ── Markdown bold rendering ───────────────────────────────────────────────
+
+/**
+ * Convert **text** markdown bold markers to <strong> tags.
+ * Runs on already-escaped HTML so the markers are still literal asterisks.
+ */
+function renderMarkdownBold(html: string): string {
+  return html.replace(/\*\*(.+?)\*\*/g, '<strong class="ai-kw">$1</strong>')
 }
 
 // ── Keyword helpers ───────────────────────────────────────────────────────
@@ -148,7 +161,7 @@ function renderExperience(exp: any): string {
     : '<span class="current-badge">Current</span>'
 
   const bulletsHtml = (exp.bullets || []).length > 0
-    ? `<ul class="exp-bullets">${(exp.bullets || []).map((b: string) => `<li>${boldKeywords(b, keywords)}</li>`).join('')}</ul>`
+    ? `<ul class="exp-bullets">${(exp.bullets || []).map((b: string) => `<li>${renderMarkdownBold(boldKeywords(b, keywords))}</li>`).join('')}</ul>`
     : ''
 
   const locationHtml = exp.city

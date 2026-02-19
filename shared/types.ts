@@ -130,6 +130,23 @@ export interface JobFilterResult {
   remote: boolean
 }
 
+export interface GapReport {
+  missingKeywords: string[]
+  weakSections: { section: string; reason: string }[]
+  leadershipGaps: string[]
+  unquantifiedAchievements: {
+    experienceId: string
+    bullet: string
+    suggestedTemplate: string
+  }[]
+  existingMetrics: {
+    experienceId: string
+    bullet: string
+    metric: string
+  }[]
+  seniorityMismatch: string | null
+}
+
 export type SuggestionType =
   | 'align_job_title'
   | 'rewrite_summary_hook'
