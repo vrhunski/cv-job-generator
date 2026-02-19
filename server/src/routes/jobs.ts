@@ -35,30 +35,8 @@ async function geocodeCity(city: string): Promise<{ lat: number; lon: number } |
   }
 }
 
-// ── Arbeitsagentur token (cached for 1 hour) ──────────────────────────────────
-let aaToken: string | null = null
-let aaTokenExpiry = 0
-
-async function getArbeitsagenturToken(): Promise<string | null> {
-  if (aaToken && Date.now() < aaTokenExpiry) return aaToken
-  try {
-    const res = await fetch('https://rest.arbeitsagentur.de/oauth/gettoken_cc', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'client_id=c003a37f-024f-462a-b36d-b001be4cd24a&client_secret=32a39620-32b3-4307-9aa1-511e3d7f48a8&grant_type=client_credentials',
-    })
-    if (!res.ok) return null
-    const text = await res.text()
-    if (!text.trim().startsWith('{')) return null
-    const data = JSON.parse(text) as any
-    if (!data.access_token) return null
-    aaToken = data.access_token
-    aaTokenExpiry = Date.now() + (data.expires_in - 60) * 1000
-    return aaToken
-  } catch {
-    return null
-  }
-}
+// ── Arbeitsagentur API key (no OAuth required) ────────────────────────────────
+const AA_API_KEY = 'jobboerse-jobsuche'
 
 // ── Fetch from ArbeitNow ──────────────────────────────────────────────────────
 function stripHtml(html: string): string {
@@ -113,33 +91,33 @@ async function fetchArbeitNow(keyword: string, page: number): Promise<JobListing
 // ── Fetch from Arbeitsagentur ─────────────────────────────────────────────────
 async function fetchArbeitsagentur(keyword: string, location: string, page: number): Promise<JobListing[]> {
   try {
-    const token = await getArbeitsagenturToken()
-    if (!token) return []
     const params = new URLSearchParams({ size: '25', page: String(page) })
     if (keyword) params.set('was', keyword)
     if (location) params.set('wo', location)
     const url = `https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/jobs?${params}`
     const res = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'X-API-Key': 'jobboerse-microservice',
-      },
+      headers: { 'X-API-Key': AA_API_KEY },
     })
-    if (!res.ok) return []
+    if (!res.ok) {
+      console.error('[AA] Jobs fetch failed:', res.status, res.statusText, await res.text().catch(() => ''))
+      return []
+    }
     const data = await res.json() as any
-    return ((data.stellenangebote || data.jobs || []) as any[]).map((j: any) => ({
+    const items: any[] = data.stellenangebote || data.jobs || []
+    return items.map((j: any) => ({
       id: `aa-${j.hashId || j.refnr || Math.random()}`,
       source: 'arbeitsagentur' as const,
-      title: j.titel || j.title || '',
-      company: j.arbeitgeber || j.company || '',
-      location: j.arbeitsort?.ort || j.location || '',
-      description: j.stellenbeschreibung || j.beschreibung || j.description || '',
+      title: j.titel || j.beruf || '',
+      company: j.arbeitgeber || '',
+      location: j.arbeitsort?.ort || '',
+      description: j.stellenbeschreibung || j.beschreibung || '',
       url: j.externeUrl || `https://www.arbeitsagentur.de/jobsuche/jobdetail/${j.hashId}`,
       remote: false,
       tags: [],
       postedAt: j.eintrittsdatum || j.aktuelleVeroeffentlichungsdatum,
     }))
-  } catch {
+  } catch (err) {
+    console.error('[AA] Jobs fetch threw:', err)
     return []
   }
 }
@@ -152,7 +130,7 @@ router.post('/search', async (req, res) => {
     }
     const [arbeitNowJobs, aaJobs] = await Promise.all([
       fetchArbeitNow(keyword, page),
-      fetchArbeitsagentur(keyword, location, page - 1),
+      fetchArbeitsagentur(keyword, location, page),
     ])
     // Merge, deduplicate by title+company
     const seen = new Set<string>()
