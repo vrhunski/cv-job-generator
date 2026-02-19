@@ -114,7 +114,7 @@ export type ApplicationStatus =
 
 export interface JobListing {
   id: string
-  source: 'arbeitsagentur' | 'arbeitnow'
+  source: 'arbeitsagentur' | 'arbeitnow' | 'getinit'
   title: string
   company: string
   location: string

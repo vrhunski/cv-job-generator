@@ -38,6 +38,11 @@ async function geocodeCity(city: string): Promise<{ lat: number; lon: number } |
 // ── Arbeitsagentur API key (no OAuth required) ────────────────────────────────
 const AA_API_KEY = 'jobboerse-jobsuche'
 
+// ── get-in-it.de cache (15-min TTL) ──────────────────────────────────────────
+const GIIT_TTL = 15 * 60 * 1000
+const giitListCache = new Map<string, { jobs: JobListing[]; ts: number }>()
+const giitDetailCache = new Map<string, { description: string; ts: number }>()
+
 // ── Fetch from ArbeitNow ──────────────────────────────────────────────────────
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -88,6 +93,71 @@ async function fetchArbeitNow(keyword: string, page: number): Promise<JobListing
   })
 }
 
+// ── Fetch from get-in-it.de ───────────────────────────────────────────────────
+const GIIT_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml',
+  'Accept-Language': 'de-DE,de;q=0.9,en;q=0.8',
+}
+
+function parseNextData(html: string): any | null {
+  const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/)
+  if (!m) return null
+  try { return JSON.parse(m[1]) } catch { return null }
+}
+
+async function fetchGetInIt(city: string, radius: number, keyword: string): Promise<JobListing[]> {
+  const cacheKey = `${city.toLowerCase()}|${radius}`
+  const cached = giitListCache.get(cacheKey)
+  if (cached && Date.now() - cached.ts < GIIT_TTL) {
+    return filterGiitByKeyword(cached.jobs, keyword)
+  }
+
+  try {
+    const url = `https://www.get-in-it.de/jobsuche?city=${encodeURIComponent(city)}&radius=${radius}`
+    const res = await fetch(url, { headers: GIIT_HEADERS })
+    if (!res.ok) {
+      console.error('[GII] Fetch failed:', res.status, res.statusText)
+      return []
+    }
+    const html = await res.text()
+    const data = parseNextData(html)
+    if (!data) {
+      console.error('[GII] __NEXT_DATA__ not found')
+      return []
+    }
+
+    const items: any[] = data?.props?.initialState?.jobSearchJobs?.jobs || []
+    const jobs: JobListing[] = items.map((j: any) => ({
+      id: `gii-${j.id}`,
+      source: 'getinit' as const,
+      title: j.title || '',
+      company: j.company?.title || '',
+      location: (j.locations || []).map((l: any) => l.name).filter(Boolean).join(', '),
+      description: '',
+      url: `https://www.get-in-it.de${j.url || `/jobsuche/p${j.id}`}`,
+      remote: j.homeOffice === true,
+      tags: (j.careers || []).map((c: any) => String(c.name)),
+      postedAt: undefined,
+    }))
+
+    giitListCache.set(cacheKey, { jobs, ts: Date.now() })
+    return filterGiitByKeyword(jobs, keyword)
+  } catch (err) {
+    console.error('[GII] Fetch threw:', err)
+    return []
+  }
+}
+
+function filterGiitByKeyword(jobs: JobListing[], keyword: string): JobListing[] {
+  if (!keyword.trim()) return jobs
+  const kw = keyword.toLowerCase()
+  return jobs.filter(j =>
+    j.title.toLowerCase().includes(kw) ||
+    j.tags.some(t => t.toLowerCase().includes(kw))
+  )
+}
+
 // ── Fetch from Arbeitsagentur ─────────────────────────────────────────────────
 async function fetchArbeitsagentur(keyword: string, location: string, page: number): Promise<JobListing[]> {
   try {
@@ -111,7 +181,7 @@ async function fetchArbeitsagentur(keyword: string, location: string, page: numb
       company: j.arbeitgeber || '',
       location: j.arbeitsort?.ort || '',
       description: j.stellenbeschreibung || j.beschreibung || '',
-      url: j.externeUrl || `https://www.arbeitsagentur.de/jobsuche/jobdetail/${j.hashId}`,
+      url: j.externeUrl || `https://www.arbeitsagentur.de/jobsuche/jobdetail/${j.refnr || j.hashId}`,
       remote: false,
       tags: [],
       postedAt: j.eintrittsdatum || j.aktuelleVeroeffentlichungsdatum,
@@ -122,20 +192,44 @@ async function fetchArbeitsagentur(keyword: string, location: string, page: numb
   }
 }
 
+// ── GET /api/jobs/getinit-detail/:id ─────────────────────────────────────────
+router.get('/getinit-detail/:id', async (req, res) => {
+  const { id } = req.params
+  const cached = giitDetailCache.get(id)
+  if (cached && Date.now() - cached.ts < GIIT_TTL) {
+    return res.json({ description: cached.description })
+  }
+  try {
+    const url = `https://www.get-in-it.de/jobsuche/p${id}`
+    const apiRes = await fetch(url, { headers: GIIT_HEADERS })
+    if (!apiRes.ok) {
+      return res.status(apiRes.status).json({ error: 'GII detail fetch failed' })
+    }
+    const html = await apiRes.text()
+    const data = parseNextData(html)
+    const description: string = data?.props?.initialState?.jobJob?.job?.content || ''
+    giitDetailCache.set(id, { description, ts: Date.now() })
+    res.json({ description })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ── POST /api/jobs/search ─────────────────────────────────────────────────────
 router.post('/search', async (req, res) => {
   try {
-    const { keyword = '', location = '', page = 1 } = req.body as {
-      keyword?: string; location?: string; page?: number
+    const { keyword = '', location = '', page = 1, sources = ['arbeitnow', 'arbeitsagentur', 'getinit'] } = req.body as {
+      keyword?: string; location?: string; page?: number; sources?: string[]
     }
-    const [arbeitNowJobs, aaJobs] = await Promise.all([
-      fetchArbeitNow(keyword, page),
-      fetchArbeitsagentur(keyword, location, page),
+    const [aaJobs, arbeitNowJobs, giitJobs] = await Promise.all([
+      sources.includes('arbeitsagentur') ? fetchArbeitsagentur(keyword, location, page) : Promise.resolve([]),
+      sources.includes('arbeitnow')      ? fetchArbeitNow(keyword, page)               : Promise.resolve([]),
+      sources.includes('getinit') && location ? fetchGetInIt(location, 50, keyword)    : Promise.resolve([]),
     ])
     // Merge, deduplicate by title+company
     const seen = new Set<string>()
     const merged: JobListing[] = []
-    for (const job of [...aaJobs, ...arbeitNowJobs]) {
+    for (const job of [...giitJobs, ...aaJobs, ...arbeitNowJobs]) {
       const key = `${job.title.toLowerCase()}|${job.company.toLowerCase()}`
       if (!seen.has(key)) {
         seen.add(key)

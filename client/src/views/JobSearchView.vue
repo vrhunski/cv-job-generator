@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProfile } from '@/composables/useProfile'
 import { useAiProvider } from '@/composables/useAiProvider'
@@ -11,6 +11,42 @@ const { profile } = useProfile()
 const { settings: aiSettings } = useAiProvider()
 const { selectJob } = useJobSearch()
 
+// ── Source selection ──────────────────────────────────────────────────────────
+const SOURCE_DEFS = [
+  { id: 'arbeitnow',      label: 'ArbeitNow',      needsLocation: false },
+  { id: 'arbeitsagentur', label: 'Arbeitsagentur',  needsLocation: false },
+  { id: 'getinit',        label: 'get-in-IT',       needsLocation: true  },
+] as const
+
+const SOURCES_KEY = 'cv-job-sources'
+
+function loadSavedSources(): string[] {
+  try {
+    const raw = localStorage.getItem(SOURCES_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    }
+  } catch {}
+  return ['arbeitnow']
+}
+
+const selectedSources = ref<string[]>(loadSavedSources())
+const lastSearchSources = ref<string[]>([])
+
+watch(selectedSources, val => {
+  localStorage.setItem(SOURCES_KEY, JSON.stringify(val))
+}, { deep: true })
+
+function toggleSource(id: string) {
+  if (selectedSources.value.includes(id)) {
+    if (selectedSources.value.length === 1) return // keep at least one
+    selectedSources.value = selectedSources.value.filter(s => s !== id)
+  } else {
+    selectedSources.value = [...selectedSources.value, id]
+  }
+}
+
 // ── Search form ───────────────────────────────────────────────────────────────
 const keyword = ref('')
 const location = ref('')
@@ -19,6 +55,15 @@ const searching = ref(false)
 const searchError = ref('')
 const jobs = ref<JobListing[]>([])
 const hasSearched = ref(false)
+
+const visibleJobs = computed(() =>
+  jobs.value.filter(j => selectedSources.value.includes(j.source))
+)
+
+const needsResearch = computed(() =>
+  hasSearched.value &&
+  selectedSources.value.some(s => !lastSearchSources.value.includes(s))
+)
 
 onMounted(() => {
   // Auto-fill from CV profile
@@ -43,7 +88,7 @@ async function search(newPage = 1) {
     const res = await fetch('/api/jobs/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keyword: keyword.value, location: location.value, page: newPage }),
+      body: JSON.stringify({ keyword: keyword.value, location: location.value, page: newPage, sources: selectedSources.value }),
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Search failed')
@@ -53,6 +98,7 @@ async function search(newPage = 1) {
       jobs.value = [...jobs.value, ...data.jobs]
     }
     hasSearched.value = true
+    lastSearchSources.value = [...selectedSources.value]
   } catch (err: any) {
     searchError.value = err.message || 'Search failed'
   } finally {
@@ -106,7 +152,7 @@ async function applyFilters() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        jobs: jobs.value,
+        jobs: visibleJobs.value,
         userLocation: filterLocation.value || location.value,
         filters: {
           germanOnly: filterGermanOnly.value,
@@ -163,7 +209,26 @@ function jobBadges(job: JobListing): string[] {
   return badges
 }
 
-function useJobForTailor(job: JobListing) {
+// ── On-demand description fetch (get-in-it.de only) ──────────────────────────
+const fetchingDescId = ref<string | null>(null)
+
+async function fetchJobDescription(job: JobListing): Promise<void> {
+  if (job.source !== 'getinit' || job.description) return
+  const numericId = job.id.replace(/^gii-/, '')
+  fetchingDescId.value = job.id
+  try {
+    const res = await fetch(`/api/jobs/getinit-detail/${encodeURIComponent(numericId)}`)
+    const data = await res.json()
+    if (data.description) job.description = data.description
+  } catch {
+    // silently ignore
+  } finally {
+    fetchingDescId.value = null
+  }
+}
+
+async function useJobForTailor(job: JobListing) {
+  await fetchJobDescription(job)
   selectJob(job)
   router.push('/tailor')
 }
@@ -171,11 +236,17 @@ function useJobForTailor(job: JobListing) {
 // ── Expand description ────────────────────────────────────────────────────────
 const expandedId = ref<string | null>(null)
 
-function toggleExpand(id: string) {
-  expandedId.value = expandedId.value === id ? null : id
+async function toggleExpand(job: JobListing) {
+  if (expandedId.value === job.id) {
+    expandedId.value = null
+    return
+  }
+  await fetchJobDescription(job)
+  expandedId.value = job.id
 }
 
 function shortDescription(desc: string): string {
+  if (!desc) return ''
   return desc.replace(/<[^>]+>/g, '').slice(0, 200).trim() + '…'
 }
 </script>
@@ -185,7 +256,7 @@ function shortDescription(desc: string): string {
     <div class="page-header">
       <div>
         <h1>Job Search</h1>
-        <p class="subtitle">Search jobs from Arbeitsagentur &amp; ArbeitNow</p>
+        <p class="subtitle">Search jobs from ArbeitNow, Arbeitsagentur &amp; get-in-IT</p>
       </div>
     </div>
 
@@ -211,16 +282,34 @@ function shortDescription(desc: string): string {
           />
         </div>
       </div>
+      <!-- Source pills -->
+      <div class="source-row">
+        <span class="source-label">Sources:</span>
+        <button
+          v-for="src in SOURCE_DEFS"
+          :key="src.id"
+          class="source-pill"
+          :class="{
+            'pill-active': selectedSources.includes(src.id),
+            'pill-disabled': src.needsLocation && !location.trim(),
+          }"
+          :disabled="src.needsLocation && !location.trim()"
+          :title="src.needsLocation && !location.trim() ? 'Enter a location to enable get-in-IT' : ''"
+          @click="toggleSource(src.id)"
+        >{{ src.label }}</button>
+      </div>
+
       <div class="search-actions">
-        <button class="btn btn-primary" :disabled="searching" @click="search(1)">
+        <button class="btn btn-primary" :disabled="searching || selectedSources.length === 0" @click="search(1)">
           {{ searching ? 'Searching…' : 'Search / Suchen' }}
         </button>
+        <span v-if="needsResearch" class="needs-research">Re-search to include new sources</span>
       </div>
       <p v-if="searchError" class="error-msg">{{ searchError }}</p>
     </div>
 
     <!-- AI Filters -->
-    <div v-if="hasSearched && jobs.length > 0" class="card filter-panel">
+    <div v-if="hasSearched && visibleJobs.length > 0" class="card filter-panel">
       <div class="filter-title">AI Filters <span class="filter-hint">(runs on demand)</span></div>
       <div class="filter-row">
         <label class="filter-check">
@@ -262,20 +351,20 @@ function shortDescription(desc: string): string {
 
     <!-- Results -->
     <div v-if="hasSearched">
-      <div class="results-header" v-if="jobs.length > 0">
-        {{ jobs.length }} jobs found
+      <div class="results-header" v-if="visibleJobs.length > 0">
+        {{ visibleJobs.length }} jobs found
         <span v-if="filtersApplied" class="filter-active-hint">
-          · {{ jobs.filter(j => !isJobDimmed(j)).length }} pass filters
+          · {{ visibleJobs.filter(j => !isJobDimmed(j)).length }} pass filters
         </span>
       </div>
 
-      <div v-if="jobs.length === 0 && !searching" class="card empty-state">
+      <div v-if="visibleJobs.length === 0 && !searching" class="card empty-state">
         <p>No jobs found. Try different keywords or location.</p>
       </div>
 
       <div class="job-list">
         <div
-          v-for="job in jobs"
+          v-for="job in visibleJobs"
           :key="job.id"
           class="job-card card"
           :class="{ 'job-dimmed': isJobDimmed(job) }"
@@ -317,15 +406,30 @@ function shortDescription(desc: string): string {
 
           <!-- Description toggle -->
           <div class="job-desc">
-            <span v-if="expandedId !== job.id" class="desc-short">{{ shortDescription(job.description) }}</span>
-            <div v-else class="desc-full" v-html="job.description"></div>
-            <button class="desc-toggle" @click="toggleExpand(job.id)">
-              {{ expandedId === job.id ? 'Show less' : 'Show more' }}
-            </button>
+            <template v-if="job.description">
+              <span v-if="expandedId !== job.id" class="desc-short">{{ shortDescription(job.description) }}</span>
+              <div v-else class="desc-full" v-html="job.description"></div>
+              <button class="desc-toggle" @click="toggleExpand(job)">
+                {{ expandedId === job.id ? 'Show less' : 'Show more' }}
+              </button>
+            </template>
+            <template v-else-if="job.source === 'getinit'">
+              <button class="desc-toggle" :disabled="fetchingDescId === job.id" @click="toggleExpand(job)">
+                {{ fetchingDescId === job.id ? 'Loading…' : 'Show description' }}
+              </button>
+            </template>
+            <span v-else class="desc-unavailable">
+              Description not available from API.
+              <a :href="job.url" target="_blank" rel="noopener">View on Arbeitsagentur ↗</a>
+            </span>
           </div>
 
           <div class="job-footer">
-            <span class="job-source">{{ job.source === 'arbeitsagentur' ? 'Arbeitsagentur' : 'ArbeitNow' }}</span>
+            <span class="job-source">{{
+              job.source === 'arbeitsagentur' ? 'Arbeitsagentur' :
+              job.source === 'getinit' ? 'get-in-IT' :
+              'ArbeitNow'
+            }}</span>
             <span v-if="job.postedAt" class="job-date">{{ new Date(job.postedAt).toLocaleDateString('de-DE') }}</span>
           </div>
         </div>
@@ -369,6 +473,59 @@ h1 {
 /* Search form */
 .search-form {
   margin-bottom: 16px;
+}
+
+/* Source pills */
+.source-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.source-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.source-pill {
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.source-pill:hover:not(:disabled) {
+  border-color: var(--color-accent, #2563eb);
+  color: var(--color-accent, #2563eb);
+}
+
+.source-pill.pill-active {
+  background: var(--color-accent, #2563eb);
+  border-color: var(--color-accent, #2563eb);
+  color: #fff;
+}
+
+.source-pill.pill-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.needs-research {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-style: italic;
+  align-self: center;
 }
 
 .search-grid {
@@ -617,6 +774,20 @@ h1 {
 }
 
 .desc-toggle:hover {
+  text-decoration: underline;
+}
+
+.desc-unavailable {
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+
+.desc-unavailable a {
+  color: var(--color-accent, #2563eb);
+  text-decoration: none;
+}
+
+.desc-unavailable a:hover {
   text-decoration: underline;
 }
 
