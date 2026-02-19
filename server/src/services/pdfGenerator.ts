@@ -31,17 +31,19 @@ function renderTemplate(html: string, profile: CVProfile): string {
   output = processConditionals(output, {
     ...profile,
     currentTitle,
+    'projects.length': (profile.projects || []).length > 0,
     'skills.length': profile.skills.length > 0,
     'experience.length': profile.experience.length > 0,
     'education.length': profile.education.length > 0,
     'languages.length': profile.languages.length > 0,
   })
 
-  // Handle {{#each experience}} ... {{/each}}
+  // Handle {{#each ...}} ... {{/each}}
   output = processEach(output, 'experience', profile.experience, renderExperience)
   output = processEach(output, 'education', profile.education, renderEducation)
   output = processEach(output, 'skills', profile.skills, renderSkillCategory)
   output = processEach(output, 'languages', profile.languages, renderLanguage)
+  output = processEach(output, 'projects', profile.projects || [], renderProject)
 
   return output
 }
@@ -249,6 +251,23 @@ function renderLanguage(lang: any): string {
         ${parts.length > 0 ? `<div class="language-details">${parts.join(' · ')}</div>` : ''}
       </div>
       ${primary ? `<span class="language-badge">${primary}</span>` : ''}
+    </div>
+  `
+}
+
+function renderProject(proj: any): string {
+  const keywords = extractKeywords(proj.techStack)
+  const linkHtml = proj.link
+    ? `<a class="project-link" href="${escapeHtml(proj.link)}">${escapeHtml(proj.link)}</a>`
+    : ''
+  return `
+    <div class="project-entry">
+      <div class="project-header-row">
+        <span class="project-name">${escapeHtml(proj.name)}</span>
+        ${linkHtml}
+      </div>
+      <p class="project-desc">${renderMarkdownBold(boldKeywords(proj.description || '', keywords))}</p>
+      ${renderTechChips(proj.techStack)}
     </div>
   `
 }

@@ -278,6 +278,38 @@
     color: #0f172a;
   }
 
+  /* ── Projects ─────────────────────────────────────── */
+  .project-entry {
+    margin-bottom: 14px;
+  }
+
+  .project-header-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+
+  .project-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: #0f172a;
+  }
+
+  .project-link {
+    font-size: 11px;
+    color: #2563eb;
+    text-decoration: none;
+    word-break: break-all;
+  }
+
+  .project-desc {
+    font-size: 12px;
+    color: #374151;
+    margin: 4px 0 6px;
+    line-height: 1.5;
+  }
+
   /* ── Tech stack chips ────────────────────────────── */
   .tech-chips {
     display: flex;
@@ -581,6 +613,13 @@
     {{/if}}
 
     <!-- Languages -->
+    {{#if projects.length}}
+    <div class="section">
+      <h2 class="section-title">Projects</h2>
+      {{#each projects}}{{/each}}
+    </div>
+    {{/if}}
+
     {{#if languages.length}}
     <div class="section">
       <h2 class="section-title">Languages</h2>

@@ -19,6 +19,8 @@ export interface CVProfile {
   skills: SkillCategory[]
   languages: LanguageSkill[]
 
+  projects?: Project[]
+
   rawText: string
   uploadedFileName: string
   createdAt: string
@@ -128,6 +130,14 @@ export interface JobFilterResult {
   germanRequired: boolean   // true = B2+ required (strict), false = accessible
   distanceKm: number | null // null if remote or geocoding failed
   remote: boolean
+}
+
+export interface Project {
+  id: string
+  name: string
+  description: string
+  techStack: string
+  link?: string
 }
 
 export interface GapReport {

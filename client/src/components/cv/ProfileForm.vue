@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import type { CVProfile, WorkExperience, Education } from '../../../../shared/types'
+import { ref } from 'vue'
+import type { CVProfile, WorkExperience, Education, Project } from '../../../../shared/types'
 import ExperienceCard from './ExperienceCard.vue'
 import SkillsEditor from './SkillsEditor.vue'
 import EducationCard from './EducationCard.vue'
 import LanguageEditor from './LanguageEditor.vue'
+import ProjectCard from './ProjectCard.vue'
 
 const profile = defineModel<CVProfile>({ required: true })
+const photoInput = ref<HTMLInputElement | null>(null)
+const photoError = ref('')
 
 function addExperience() {
   profile.value.experience.push({
@@ -30,19 +34,58 @@ function addEducation() {
     graduationDate: '',
   })
 }
+
+function addProject() {
+  if (!profile.value.projects) profile.value.projects = []
+  profile.value.projects.push({
+    id: crypto.randomUUID(),
+    name: '',
+    description: '',
+    techStack: '',
+  })
+}
+
+function handlePhotoUpload(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  photoError.value = ''
+  if (file.size > 2 * 1024 * 1024) {
+    photoError.value = 'Image must be under 2MB'
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => { profile.value.photo = reader.result as string }
+  reader.readAsDataURL(file)
+}
 </script>
 
 <template>
   <div class="profile-form" v-if="profile">
     <section class="card form-section">
       <h3>Personal Information</h3>
+
+      <!-- Photo: show preview if present, upload button if not -->
       <div v-if="profile.photo" class="photo-preview">
         <img :src="profile.photo" alt="Profile photo" class="photo-img" />
         <div class="photo-meta">
-          <span class="photo-label">Profile photo extracted from CV</span>
+          <span class="photo-label">Profile photo</span>
           <button class="btn-remove-photo" @click="profile.photo = undefined">Remove</button>
         </div>
       </div>
+      <div v-else class="photo-upload">
+        <button class="btn btn-secondary btn-sm" @click="photoInput?.click()">
+          + Add profile photo
+        </button>
+        <span v-if="photoError" class="photo-error">{{ photoError }}</span>
+        <input
+          ref="photoInput"
+          type="file"
+          accept="image/*"
+          class="photo-input-hidden"
+          @change="handlePhotoUpload"
+        />
+      </div>
+
       <div class="form-grid">
         <div class="form-group">
           <label>Full Name</label>
@@ -119,6 +162,20 @@ function addEducation() {
     </section>
 
     <section class="form-section">
+      <h3>Projects</h3>
+      <ProjectCard
+        v-for="(proj, i) in profile.projects"
+        :key="proj.id || i"
+        :model-value="proj"
+        @update:model-value="(val) => profile.projects![i] = val"
+        @remove="profile.projects!.splice(i, 1)"
+      />
+      <button class="btn btn-secondary btn-sm" @click="addProject">
+        + Add Project
+      </button>
+    </section>
+
+    <section class="form-section">
       <h3>Skills</h3>
       <SkillsEditor v-model="profile.skills" />
     </section>
@@ -184,6 +241,22 @@ function addEducation() {
 
 .btn-remove-photo:hover {
   text-decoration: underline;
+}
+
+.photo-upload {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.photo-input-hidden {
+  display: none;
+}
+
+.photo-error {
+  font-size: 12px;
+  color: var(--color-danger);
 }
 
 .form-grid {
